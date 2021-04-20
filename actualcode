@@ -1,0 +1,168 @@
+//Newest code 3/26/21 below
+
+#include <Servo.h>
+#include <Wire.h>
+
+Servo myservoR;
+Servo myservoL;
+
+const int buttonPinLeft= 2; 
+const int buttonPinRight = 3; 
+float calibration_value = 21.35;
+int phval = 0;
+float phAvg = 0;
+float phCumulative = 0;
+int cycleNum = 1;
+unsigned long int avgval;
+int buffer_arr[10],temp;
+// variables will change:
+int buttonStateLeft = 0;         // variable for reading the pushbutton status
+int buttonStateRight = 0;
+
+long hourTimer =0;
+long loopTimer = 50000; //Value to change to determine how often it checks, 50000 is 20 minutes with 1000 delay
+long timerCheck = 0;
+long loopDelay =1000;
+
+void setup()
+{
+  myservoR.attach(9);
+  myservoL.attach(8);
+  pinMode(buttonPinLeft, INPUT);
+  pinMode(buttonPinRight, INPUT);
+  Serial.begin(9600);
+}
+
+
+
+void loop() 
+{
+  buttonStateLeft = digitalRead(buttonPinLeft);
+  buttonStateRight = digitalRead(buttonPinRight);
+  
+  //PH sensor 
+  for(int i=0;i<10;i++)
+     {
+      buffer_arr[i]=analogRead(A0);
+      delay(30);
+     }
+  for(int i=0;i<9;i++)
+     {
+      for(int j=i+1;j<10;j++)
+        {
+        if(buffer_arr[i]>buffer_arr[j])
+          {
+            temp=buffer_arr[i];
+            buffer_arr[i]=buffer_arr[j];
+            buffer_arr[j]=temp;
+          }
+        }
+     }  
+  avgval=0;
+  for(int i=2;i<8;i++)
+     avgval+=buffer_arr[i];
+  float volt=(float)avgval*5.0/1024/6;
+  float ph_act = -5.70 * volt + calibration_value;
+  if (cycleNum >=25) //reset the average after 25 cycles
+  {
+    phCumulative = 0;
+    phAvg = 0;
+    cycleNum = 1;
+Serial.print('\n');
+  }
+  phCumulative = phCumulative + ph_act;
+  phAvg = phCumulative/cycleNum;
+  cycleNum = cycleNum + 1;
+  
+  Serial.print("pH Val:");
+  Serial.print(ph_act);
+  Serial.print(" hourTimer =");
+  Serial.print(hourTimer);
+  Serial.print(" PH Average = ");
+  Serial.print(phAvg);
+  Serial.print(" Cycle number= ");
+  Serial.print(cycleNum);
+  Serial.print('\n');//prints a new line
+  
+  
+  //delay(1000);
+
+//code for autonomously adding/subtracting ph value every hour
+timerCheck = (loopTimer * (16700/loopDelay));
+if (hourTimer >=timerCheck) //loopTimer is the number of seconds in the loop
+{
+  if (phAvg > 7.0)
+  {
+    Serial.print("acidic, let's add a drop of phDecrease");
+    //Serial.print('\n'); //prints a new line
+    phDecrease(250);
+    delay(100);
+  } 
+  else if (phAvg < 6.5)
+  {
+  Serial.print("alkaline, let's add a drop of phIncrease");
+  //Serial.print('\n'); //prints a new line;
+  phIncrease(250);
+  delay(100);
+  } 
+  else 
+  {
+  Serial.print("PH is all good here ");
+  }
+  hourTimer =0;  //resets the hour clock timer to 0
+}
+
+
+//Code for Pressing the Buttons
+    if (buttonStateLeft == HIGH)
+    {
+      delay(500);
+      phIncrease(250); //more time here will add more drops, 250ish should be one drop at 12 voults
+    }
+    else
+    {
+      myservoL.write(89);
+      delay(100);
+    }
+
+    if (buttonStateRight == HIGH)
+    {
+      delay(500);
+      phDecrease(250); //More time here will add more drops 250ish should be one drop at 12 volts
+    }
+    else
+    {
+      myservoR.write(89);
+      delay(100);
+    }
+
+hourTimer = hourTimer + loopDelay;
+delay(loopDelay);
+    
+}
+
+void phIncrease(int timeDelay)
+{
+  cycleNum = 1;
+  phCumulative = 0;
+  phAvg = 0;
+  Serial.print("PH Increase Pin 2");
+  myservoL.write(0);
+  delay(timeDelay);  //Time to adjust to add/subtract amount being added to water
+  myservoL.write(89);
+  delay(1000);
+}
+
+void phDecrease(int timeDelay)
+{
+  cycleNum = 1;
+  phCumulative = 0;
+  phAvg = 0;
+  Serial.print("PH Decrease Pin 3");
+  myservoR.write(0);
+  delay(timeDelay); //Time to adjust to add/subtract amount being added to water
+  myservoR.write(89);
+  delay(1000);
+}  
+
+
